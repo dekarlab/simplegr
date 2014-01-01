@@ -1,0 +1,236 @@
+options {
+  MULTI=true; 
+  STATIC=false;
+  NODE_DEFAULT_VOID=true;
+  NODE_CLASS="de.ka.simplegr.expr.Expression";
+}
+
+PARSER_BEGIN(SimpleGrParser)
+package de.ka.simplegr.parser;
+
+public class SimpleGrParser {
+  /**
+   * Returns the root node of the AST.  
+   * It only makes sense to call this after a successful parse. 
+   * @return the root node
+   */
+  public Node rootNode() {
+    return jjtree.rootNode();
+  } 
+}
+
+PARSER_END(SimpleGrParser)
+
+
+SKIP : /* WHITE SPACE */
+{
+  " "
+| "\t"
+| "\n"
+| "\r"
+| "\f"
+}
+
+TOKEN:
+{
+   <NumberLit: (<Digit>)+ "." (<Digit>)+ | "." (<Digit>)+ >
+  |<BooleanLit: "TRUE" | "FALSE" >
+  |<StringLit: "\""
+      (   (~["\"","\\","\n","\r"])
+        | ("\\"
+            ( ["n","t","b","r","f","\\","'","\""]
+            | ["0"-"7"] ( ["0"-"7"] )?
+            | ["0"-"3"] ["0"-"7"] ["0"-"7"]
+            )
+          )
+      )*
+      "\"">
+  |<Null: "NULL" >
+  |<And: "AND" >
+  |<Or: "OR" >
+  |<Not: "NOT">
+  |<Identifier: <Letter> (<Letter>|<Digit>|"_")* >
+  |<Equal: "==">
+  |<NotEqual: "!=">
+  |<LessThan: "<">
+  |<LessEqualThan: "<=">
+  |<GreaterThan: ">">
+  |<GreaterEqualThan: ">=">
+  |<Plus: "+">
+  |<Minus: "-">
+  |<Div: "/">
+  |<Mult: "*">
+  |<Open: "(">
+  |<Close: ")">
+  |<Comma: ",">
+}
+
+TOKEN:
+{
+  < #Letter: [ "a"-"z", "A"-"Z" ] >
+|
+  < #Digit: [ "0"-"9"] >
+}
+
+
+/*
+ * Start parsing from here.
+ */
+void parse() :
+{}
+{
+   Expression()
+   <EOF>
+}
+
+/*
+ * Expression.
+ */
+void Expression() :
+{}
+{
+  BoolOrExpr()
+}
+
+void BoolOrExpr() :
+{}
+{
+  BoolAndExpr() ( <Or> BoolAndExpr() #BoolOrExpr(2) )*
+}
+
+void BoolAndExpr() :
+{}
+{
+  EqualsExpr() ( <And> EqualsExpr() #BoolAndExpr(2) )*
+}
+
+
+/** Equality expression. */
+void EqualsExpr() :
+{}
+{
+  RelationalExpr()
+  (
+     <Equal> RelationalExpr() #BoolEqualsExpr(2)
+   |
+     <NotEqual> RelationalExpr() #BoolNotEqualsExpr(2)
+  )*
+}
+
+/** Relational expression. */
+void RelationalExpr() :
+{}
+{
+  AdditiveExpr()
+  (
+    <LessThan> AdditiveExpr() #BoolLessThanExpr(2)
+   |
+    <GreaterThan> AdditiveExpr() #BoolGreaterThanExpr(2)
+   |
+    <LessEqualThan> AdditiveExpr() #BoolLessThanOrEqualsExpr(2)
+   |
+    <GreaterEqualThan> AdditiveExpr() #BoolGreaterThanOrEqualsExpr(2)
+  )*
+}
+
+void AdditiveExpr() :
+{}
+{
+  MultiplicativeExpr()
+  (
+    <Plus> MultiplicativeExpr() #NumAddExpr(2)
+   |
+    <Minus> MultiplicativeExpr() #NumSubstrExpr(2)
+  )*
+}
+
+void MultiplicativeExpr() :
+{}
+{
+  UnaryExpr()
+  (
+    <Mult> UnaryExpr() #NumMulExpr(2)
+   |
+    <Div> UnaryExpr() #NumDivExpr(2)
+  )*
+}
+
+
+void UnaryExpr() :
+{}
+{
+  <Not> UnaryExpr() #BoolNotExpr(1)
+  |
+  PrimaryExpr()
+}
+
+/** Primary expression. */
+void PrimaryExpr() :
+{}
+{
+	  LOOKAHEAD(2)
+	  Function() 
+	|
+	  Variable()
+   	|
+      Literal()
+	|
+   	  <Open> Expression() <Close>
+ }
+
+/** An Id. */
+void Variable() #Variable:
+{
+   Token t;
+}
+{
+    t = <Identifier>  { jjtThis.setName(t.image); }
+}
+
+/** An Id. */
+void Function() #FuncExpr:
+{
+   Token t;
+}
+{
+   t = <Identifier> Parameters()  { jjtThis.setName(t.image);} 
+}
+ 
+void Parameters():
+{
+}
+{
+    <Open> [Expression() (<Comma> Expression())*] <Close>
+}
+/** A literal. */
+void Literal() :
+{
+   Token t;
+}
+{
+	 (
+	  t=<NumberLit>
+	    {
+	       jjtThis.setValue(Double.parseDouble(t.image));
+	    }
+	 )#NumberLiteral
+	|
+	 (
+	  t=<BooleanLit>
+	    {
+	       jjtThis.setValue(Boolean.parseBoolean(t.image.toLowerCase()));
+	    }
+	 )#BooleanLiteral
+	|
+	 (
+	  t=<StringLit>
+	    {
+	       jjtThis.setValue(t.image);
+	    }
+	 )#StringLiteral
+	 |
+	 (
+	  t=<Null>
+	 )#NullExpr
+}
+
